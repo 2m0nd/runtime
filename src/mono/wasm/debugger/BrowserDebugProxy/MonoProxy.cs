@@ -708,6 +708,28 @@ namespace Microsoft.WebAssembly.Diagnostics
 
             switch (eventName)
             {
+                case "ADD_ASSEMBLY_PDB":
+                    var context = GetContext(sessionId);
+                    var assembly_data = eventArgs?["assembly_data"].ToObject<byte[]>();
+                    var pdb_data = eventArgs?["pdb_data"].ToObject<byte[]>();
+
+                    await
+                    foreach (var source in context.store.Add(sessionId, assembly_data, pdb_data, token).WithCancellation(token))
+                    {
+                        var scriptSource = JObject.FromObject(source.ToScriptSource(context.Id, context.AuxData));
+                        Log("verbose", $"\tsending {source.Url} {context.Id} {sessionId.sessionId}");
+
+                        SendEvent(sessionId, "Debugger.scriptParsed", scriptSource, token);
+
+                        foreach (var req in context.BreakpointRequests.Values)
+                        {
+                            if (req.TryResolve(source))
+                            {
+                                await SetBreakpoint(sessionId, context.store, req, true, token);
+                            }
+                        }
+                    }
+                    return true;
                 default:
                 {
                     logger.LogDebug($"Unknown js event name: {eventName} with args {eventArgs}");
